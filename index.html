@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Title</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body { font-family: 'Droid Serif'; }
+      h1, h2, h3 {
+        font-family: 'Yanone Kaffeesatz';
+        font-weight: normal;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+      .inverse {
+        background: #272822;
+        color: #777872;
+        text-shadow: 0 0 20px #333;
+      }
+      .inverse h1, .inverse h2 {
+        color: #f3f3f3;
+        line-height: 0.8em;
+      }
+
+      /* Slide-specific styling */
+      #slide-inverse .footnote {
+        bottom: 12px;
+        left: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <textarea id="source">
+
+class: center, middle, inverse
+
+
+# Welcome!
+
+Redis Modules Hackathon, 11/11/2016
+
+![](http://sysadmin.guru/images/partner-logos/logo-redis.png)
+
+
+---
+
+
+# Quick Intro - Redis Labs
+
+* Founded in 2011
+* HQ in Mountain View CA, R&D center in Tel-Aviv IL.
+* The commercial company behind Redis
+* Provides enhanced Enterprise-Class Redis:
+    * As-a-service – Redis Cloud 
+    * On-premises – Redis Labs Enterprise Cluster (RLEC)
+
+![](rl.png)
+
+           
+---
+
+# Redis & Redis Modules
+
+* Redis is over 7 years old!
+* Most popular KV store
+* But actually it's a **K ==> DS store**
+* Modules allow extending Redis
+* With:
+    * New Commands
+    * New Data Structures
+    * New Capabilities
+    
+---
+
+# What This Hackathon is About
+
+* Experience The *Power Of Modules™*!
+* Be part of the Redis community and help it advance
+* Build *Really Cool Shit™*!
+* Get guidance from *Top Redis Experts™*!
+
+---
+
+# Also...
+
+* Drink Beer!
+* Eat Food!
+* Have Fun!
+* Hack!
+
+---
+
+# Agenda
+
+| Time    |       WAT |
+| :------------- |:------------- 
+|10:30|*this*|
+| 11:00 |Get organized, start!
+|13:00 |Lunch!|
+| 13:30| Hack| 
+| 18:00 | Kabalat Shabat + Dinner |
+| 19:00 |  Hack Till You Drop™! |
+
+---
+
+class: center, middle, inverse
+
+# Redis Modules 101
+
+---
+
+# What Modules Can Do
+
+* Basically C/C++ shared libraries
+* Define new Redis commands
+* Interact with Redis with near 0 latency
+* Define new data structures
+* Link with other libraries
+* Call network APIs without blocking Redis
+
+---
+
+# Example Module Usage
+
+```sh
+
+127.0.0.1:6379> MODULE LOAD "./example.so"
+OK
+
+127.0.0.1:6379> COMMAND INFO EXAMPLE.LEFTPAD
+1) 1) "example.leftpad"
+...
+
+127.0.0.1:6379> EXAMPLE.LEFTPAD "foo" 8
+     foo
+
+127.0.0.1:6379> EXAMPLE.LEFTPAD "foo" 8 "_"
+_____foo
+
+
+```
+---
+
+# Some Modules We've Built
+
+* FullText Search Engine
+* Machine Learning Server
+* JSON document support
+* Bloom Filters 
+* Secondary Indexing for Redis
+* PAM Auth
+* Neural Network
+
+---
+
+class: center, middle, inverse
+
+# Slightly Deeper Dive 
+
+---
+
+# Defining  a Redis Command
+
+```c
+
+#include "redismodule.h"
+
+int EchoCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc)
+{
+    if (argc != 2)
+        return RedisModule_WrongArity(ctx);
+
+    return RedisModule_ReplyWithString(ctx, argv[1]);
+}
+
+```
+
+---
+
+
+# Initializing a Module
+
+```c
+
+int RedisModule_OnLoad(RedisModuleCtx *ctx)
+{
+    if (RedisModule_Init(ctx, "example", 1, REDISMODULE_APIVER_1)  
+        == REDISMODULE_ERR) {
+            return REDISMODULE_ERR;
+    }
+
+    if (RedisModule_CreateCommand(ctx, "example.echo", Echo, "readonly", 0, 0, 0)
+        == REDISMODULE_ERR) {
+        return REDISMODULE_ERR;
+    }
+
+    return REDISMODULE_OK;
+}
+
+
+```
+
+---
+
+# Calling Redis From a Module
+
+```c
+/*
+* HGETSET <key> <element> <value>
+* Atomically set a value in a HASH key to <value> and return its value before
+*/
+int HGetSetCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+
+  // we need EXACTLY 4 arguments
+  if (argc != 4) {
+    return RedisModule_WrongArity(ctx);
+  }
+  RedisModule_AutoMemory(ctx);
+
+  // get the current value of the hash element
+  RedisModuleCallReply *rep =
+      RedisModule_Call(ctx, "HGET", "ss", argv[1], argv[2]);
+
+  RedisModule_Call(ctx, "HSET", "sss", argv[1], argv[2], argv[3]);
+ 
+  // forward the HGET reply to the client
+  RedisModule_ReplyWithCallReply(ctx, rep);
+  return REDISMODULE_OK;
+}
+
+```
+
+---
+
+# Building Your Module
+
+1. Compile It:
+
+        gcc -fPIC -std=gnu99 -c -o example.o example.c
+
+2. Link It:
+
+        ld -o example.so example.o -shared -Bsymbolic -lc
+
+3. Run It:
+
+        redis-server --loadmodule ./example.so
+
+4. Test It:
+
+        redis-cli example.echo tango
+
+
+---
+
+# What Else?
+
+* Use the Low Level API, Luke
+* Remember Redis is single threaded!
+* But check out the `BlockClient` family of commands
+* Use a Makefile or CMake from examples
+* Use LibRMUtil
+
+---
+
+# More Resources
+
+## Our Slack Channel
+
+[https://redismoduleshackathon.slack.com](https://redismoduleshackathon.slack.com)
+
+
+### Redis documentation, source and examples:
+[https://github.com/antirez/redis](https://github.com/antirez/redis)
+
+### RedisModulesSDK
+[https://github.com/RedisLabs/RedisModulesSDK](https://github.com/RedisLabs/RedisModulesSDK)
+
+---
+
+class: center, middle, inverse
+
+# Thank You!
+
+Now go and hack on, right after...
+
+---
+
+class: center, middle, inverse
+
+# And Now, A Word From Salvatore Sanfilippo!
+
+
+    </textarea>
+    <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create();
+    </script>
+  </body>
+</html>
